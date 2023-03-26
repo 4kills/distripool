@@ -1,5 +1,8 @@
+import threading
 from typing import Tuple, Callable, List, Any
 from distripool.orchestrator import _Orchestrator, default_orchestrator
+from distripool.worker import make_worker
+from distripool.asyncwrap import _AsyncResult
 
 
 class Pool:
@@ -11,7 +14,10 @@ class Pool:
                  orchestrator: _Orchestrator | None = None):
         self.processes = processes
         self.orchestrator = orchestrator if orchestrator is not None else default_orchestrator()
+        self._terminated = False
         self.orchestrator._acquire()
+        self._worker = make_worker(self.orchestrator.listen_on, start=False)
+        threading.Thread(target=self._worker.start).start()
 
     def apply(self, func, args=(), kwds={}):
         """
@@ -25,30 +31,36 @@ class Pool:
         """
         raise NotImplementedError
 
-    def map(self, func: Callable, iterable: List) -> List:
+    def map(self, func: Callable, iterable: List, chunksize: int = None) -> List:
         """
         A parallel equivalent of the map() built-in function (it supports only one iterable argument though).
         It blocks until the result is ready.
+
+        This method chops the iterable into a number of chunks which it submits to the process pool as separate tasks.
+        The (approximate) size of these chunks can be specified by setting chunksize to a positive integer.
         """
-        chunk_size = max(1, len(iterable) // self.processes)
+        chunk_size = max(1, len(iterable) // self.processes) if chunksize is None else chunksize
         chunks = [iterable[i:i + chunk_size] for i in range(0, len(iterable), chunk_size)]
         for chunk_id, chunk in enumerate(chunks):
             self.orchestrator._send_work((chunk_id, func, chunk))
 
         unordered_results: List[Tuple[int, List[any, ...]]] = []
         for _ in chunks:
-            unordered_results.append(self.orchestrator._receive_result())
+            result = self.orchestrator._receive_result()
+            if isinstance(result[1], Exception):
+                raise result[1]
+            unordered_results.append(result)
 
         sorted_results = sorted(unordered_results, key=lambda x: x[0])
         flattened_results = [result for chunked_results in sorted_results for result in chunked_results[1]]
 
         return flattened_results
 
-    def map_async(self, func, iterable, chunksize=None, callback=None, error_callback=None):
+    def map_async(self, func, iterable, chunksize=None, callback=None, error_callback=None) -> _AsyncResult:
         """
         A variant of the map() method which returns a AsyncResult object.
         """
-        raise NotImplementedError
+        return _AsyncResult(self, self.map, (func, iterable, chunksize), callback, error_callback)
 
     def imap(self, func, iterable, chunksize=1):
         """
@@ -81,7 +93,9 @@ class Pool:
         self.orchestrator.close()
 
     def terminate(self):
+        self._worker.close()
         self.orchestrator._release()
+        self._terminated = True
 
     def join(self):
         """
@@ -94,3 +108,4 @@ class Pool:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.terminate()
+

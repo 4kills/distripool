@@ -16,12 +16,21 @@ class _Worker:
         while True:
             try:
                 chunk_id, func, chunk = self.receiver.recv_pyobj()
-            except zmq.error.ContextTerminated:
+            except zmq.error.ContextTerminated:  # after using close() from another thread
                 return
 
             with LocalPool(processes=self.processes) as local_pool:
-                result = local_pool.map(func, chunk)
-            self.sender.send_pyobj((chunk_id, result))
+                try:
+                    result = local_pool.map(func, chunk)
+                except Exception as e:
+                    result = e
+
+            try:
+                self.sender.send_pyobj((chunk_id, result))
+            except zmq.error.ZMQError as e:
+                if e.errno == 128:  # "not a socket" after using close() from another thread
+                    return
+                raise e
 
     def close(self):
         self.receiver.close()
