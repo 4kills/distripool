@@ -1,6 +1,8 @@
 import zmq
 from typing import Tuple, Callable, List, Any
 
+from distripool.packet import DataPacket, ResultPacket
+
 _orchestrator = None
 
 
@@ -24,10 +26,10 @@ class _Orchestrator:
     def _release(self):
         self.free = True
 
-    def _send_work(self, work: Any):
+    def _send_work(self, work: DataPacket):
         self.sender.send_pyobj(work)
 
-    def _receive_result(self) -> Any:
+    def _receive_result(self) -> ResultPacket:
         return self.receiver.recv_pyobj()
 
     def close(self):

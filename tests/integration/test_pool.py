@@ -1,5 +1,4 @@
 import multiprocessing
-import random
 import threading
 import time
 import unittest
@@ -10,6 +9,10 @@ from distripool.worker import make_worker
 
 def square(x):
     return x * x
+
+
+def sum(a, b):
+    return a + b
 
 
 def raise_error(x):
@@ -24,7 +27,9 @@ def wait(x):
 class TestDistributedPool(unittest.TestCase):
     workers = []
     data = [i for i in range(20)]
+    tuples_data = [(i, i+1) for i in range(20)]
     expected_squares = [square(x) for x in data]
+    expected_sums = [sum(*e) for e in tuples_data]
     random_time = [0.148, 0.187, 0.206, 0.281, 0.219, 0.209, 0.120, 0.226, 0.290, 0.179, 0.167, 0.263, 0.259, 0.238, 0.162, 0.274, 0.156, 0.296, 0.277, 0.291]
 
     def setUp(self):
@@ -46,6 +51,10 @@ class TestDistributedPool(unittest.TestCase):
     def test_map(self):
         result = self.base_pool.map(square, self.data)
         self.assertEqual(result, self.expected_squares)
+
+    def test_starmap(self):
+        result = self.base_pool.starmap(sum, self.tuples_data)
+        self.assertEqual(result, self.expected_sums)
 
     def test_map_async(self):
         result_async = self.base_pool.map_async(square, self.data)
@@ -87,6 +96,24 @@ class TestDistributedPool(unittest.TestCase):
 
         self.base_pool.map_async(raise_error, self.data, error_callback=error_callback)
         semaphore.acquire()
+
+    def test_starmap_async(self):
+        result = self.base_pool.starmap_async(sum, self.tuples_data)
+        self.assertEqual(result.get(), self.expected_sums)
+
+    def test_apply(self):
+        with self.assertRaises(TypeError):
+            self.base_pool.apply(square, 3)
+
+        res = self.base_pool.apply(square, (3,))
+        self.assertEqual(res, 9)
+
+        res = self.base_pool.apply(sum, (3, 4))
+        self.assertEqual(res, 7)
+
+    def test_apply_async(self):
+        res = self.base_pool.apply_async(sum, (3, 4))
+        self.assertEqual(res.get(), 7)
 
 
 if __name__ == "__main__":
