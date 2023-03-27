@@ -28,37 +28,55 @@ class _Worker:
                 or data.initargs != self._initargs
                 or data.maxtasksperchild != self._maxtasksperchild)
 
-    def start(self):
+    def _execute_on_socket(self, func, *args):
         try:
-            work: DataPacket = self.receiver.recv_pyobj()
+            return func(*args), True
         except zmq.error.ContextTerminated:  # after using close() from another thread
+            return None, False
+        except zmq.error.ZMQError as e:
+            if e.errno == 128:  # "not a socket" after using close() from another thread
+                return None, False
+            raise e
+
+    def _send(self, payload: ResultPacket) -> bool:
+        _, ok = self._execute_on_socket(self.sender.send_pyobj, payload)
+        return ok
+
+    def _receive(self) -> Tuple[DataPacket | None, bool]:
+        return self._execute_on_socket(self.receiver.recv_pyobj)
+
+    def _work_loop_with_initial(self, work: DataPacket) -> bool:
+        with LocalPool(processes=self._processes, initializer=self._initializer, initargs=self._initargs,
+                       maxtasksperchild=self._maxtasksperchild) as local_pool:
+            while True:
+                try:
+                    result = work.choose_mapping(local_pool)(work.func, work.chunk)
+                except Exception as e:
+                    result = e
+
+                ok = self._send(ResultPacket(work.id, result))
+                if not ok:
+                    return ok
+
+                work, ok = self._receive()
+                if not ok:
+                    return ok
+
+                if self._pool_vars_are_unequal(work):
+                    self._set_pool_variables(work)
+                    return True
+
+    def start(self):
+        work, ok = self._receive()
+        if not ok:
             return
 
         self._set_pool_variables(work)
 
         while True:
-            with LocalPool(processes=self._processes, initializer=self._initializer, initargs=self._initargs, maxtasksperchild=self._maxtasksperchild) as local_pool:
-                while True:
-                    try:
-                        result = work.choose_mapping(local_pool)(work.func, work.chunk)
-                    except Exception as e:
-                        result = e
-
-                    try:
-                        self.sender.send_pyobj(ResultPacket(work.id, result))
-                    except zmq.error.ZMQError as e:
-                        if e.errno == 128:  # "not a socket" after using close() from another thread
-                            return
-                        raise e
-
-                    try:
-                        work: DataPacket = self.receiver.recv_pyobj()
-                    except zmq.error.ContextTerminated:  # after using close() from another thread
-                        return
-
-                    if self._pool_vars_are_unequal(work):
-                        self._set_pool_variables(work)
-                        break
+            ok = self._work_loop_with_initial(work)
+            if not ok:
+                return
 
     def close(self):
         self.receiver.close()
