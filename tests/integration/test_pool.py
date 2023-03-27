@@ -2,9 +2,7 @@ import multiprocessing
 import threading
 import time
 import unittest
-from distripool.orchestrator import make_orchestrator
-from distripool.pool import Pool
-from distripool.worker import make_worker
+from distripool import make_orchestrator, Pool, make_worker
 
 
 def square(x):
@@ -73,7 +71,7 @@ class TestDistributedPool(unittest.TestCase):
     def test_map_async_timeout(self):
         result_async = self.base_pool.map_async(time.sleep, self.random_time)
         with self.assertRaises(multiprocessing.TimeoutError):
-            result_async.get(timeout=2)
+            result_async.get(timeout=1)
 
     def test_map_async_callback(self):
         semaphore = threading.Semaphore(1)
