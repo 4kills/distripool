@@ -1,6 +1,6 @@
 import os
 import threading
-from typing import Tuple, Callable, List, Any, Iterable
+from typing import Tuple, Callable, List, Any, Iterable, Literal
 from distripool.orchestrator import _Orchestrator, default_orchestrator
 from distripool.packet import DataPacket
 from distripool.worker import make_worker
@@ -30,7 +30,7 @@ class Pool:
         self._worker = make_worker(self.orchestrator.listen_on, start=False)
         threading.Thread(target=self._worker.start).start()
 
-    def _map(self, func, iterable, chunksize, mapping_type):
+    def _map(self, func, iterable, chunksize, mapping_type: Literal['map', 'starmap'] = 'map'):
         if self._closed:
             raise ValueError("Pool not running")
 
@@ -90,17 +90,31 @@ class Pool:
         """
         return self._asynchronize(self, self.map, (func, iterable, chunksize), callback, error_callback)
 
-    def imap(self, func, iterable, chunksize=1):
+    def imap(self, func, iterable, chunksize=1, parallel_calls=2):
         """
         A lazier version of map().
-        """
-        raise NotImplementedError
 
-    def imap_unordered(self, func, iterable, chunksize=1):
+        The chunksize argument is the same as the one used by the map() method.
+        For very long iterables using a large value for chunksize can make the job complete much faster than using the default value of 1.
+
+        The parallel_calls argument indicates how many chunks should be produced at a time for worker nodes to process.
+        """
+        parallel_chunk_size = chunksize * parallel_calls
+        parallel_chunks = [iterable[i:i + parallel_chunk_size] for i in range(0, len(iterable), parallel_chunk_size)]
+
+        for parallel_chunk in parallel_chunks:
+            chunk_result = self._map(func, parallel_chunk, chunksize=chunksize)
+            for result in chunk_result:
+                yield result
+
+    def imap_unordered(self, func, iterable, chunksize=1, parallel_calls=2):
         """
         The same as imap() except that the ordering of the results from the returned iterator should be considered arbitrary.
+        (Only when there is only one worker process is the order guaranteed to be “correct”.)
+
+        Currently, this method merely calls self.imap(). However, expect this behavior to change in the future.
         """
-        raise NotImplementedError
+        return self.imap(func, iterable, chunksize, parallel_calls)
 
     def starmap(self, func, iterable, chunksize=None):
         """
@@ -122,6 +136,10 @@ class Pool:
         self._closed = True
 
     def terminate(self):
+        """
+        Stops the worker processes immediately without completing outstanding work.
+        When the pool object is garbage collected terminate() will be called immediately.
+        """
         self._worker.close()
         self.orchestrator._release()
         self._terminated = True

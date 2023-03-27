@@ -97,6 +97,10 @@ class TestDistributedPool(unittest.TestCase):
         self.base_pool.map_async(raise_error, self.data, error_callback=error_callback)
         semaphore.acquire()
 
+    def test_imap(self):
+        result = [r for r in self.base_pool.imap(square, self.data)]
+        self.assertEqual(result, self.expected_squares)
+
     def test_starmap_async(self):
         result = self.base_pool.starmap_async(sum, self.tuples_data)
         self.assertEqual(result.get(), self.expected_sums)
