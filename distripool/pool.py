@@ -14,6 +14,22 @@ class Pool:
                  maxtasksperchild=None,
                  context=None,
                  orchestrator: _Orchestrator | None = None):
+        """
+        A distributed process pool object which controls a pool of distributed workers to which jobs can be submitted.
+        It supports asynchronous results with timeouts and callbacks and has a parallel map implementation.
+
+        Note that the methods of the pool object should only be called by the process which created the pool.
+
+        :param processes: is the number of worker processes to use. If processes is None then the number returned by os.cpu_count() is used.
+        :param initializer: If initializer is not None then each worker process will call initializer(*initargs) when it starts.
+        :param initargs: Args for initializer
+        :param maxtasksperchild: is the number of tasks a worker process can complete before it will exit and be replaced with a fresh worker process,
+        to enable unused resources to be freed. The default maxtasksperchild is None, which means worker processes will live as long as the pool.
+        :param context: NOT IMPLEMENTED.
+        :param orchestrator: The orchestrator this pool should use. Defaults to default_orchestrator().
+        If you do not want to use multiple clusters of worker nodes and/or use several Pools in parallel,
+        defaul_orchestrator() is a sensible default. An orchestrator can only be used by one Pool at a time.
+        """
         self._processes = processes if processes is not None else os.cpu_count()
         self._initializer = initializer
         self._initargs = initargs
@@ -71,6 +87,14 @@ class Pool:
     def apply_async(self, func, args=(), kwds={}, callback=None, error_callback=None) -> _AsyncResult:
         """
         A variant of the apply() method which returns an AsyncResult object.
+
+        If callback is specified then it should be a callable which accepts a single argument.
+        When the result becomes ready callback is applied to it, that is unless the call failed, in which case the error_callback is applied instead.
+
+        If error_callback is specified then it should be a callable which accepts a single argument.
+        If the target function fails, then the error_callback is called with the exception instance.
+
+        Callbacks should complete immediately since otherwise the thread which handles the results will get blocked.
         """
         return self._asynchronize(self, self.apply, (func, args, kwds), callback, error_callback)
 
@@ -81,12 +105,24 @@ class Pool:
 
         This method chops the iterable into a number of chunks which it submits to the process pool as separate tasks.
         The (approximate) size of these chunks can be specified by setting chunksize to a positive integer.
+
+        Note that it may cause high memory usage for very long iterables.
+        Consider using imap() or imap_unordered() with explicit chunksize option for better efficiency.
         """
         return self._map(func, iterable, chunksize, 'map')
 
     def map_async(self, func, iterable, chunksize=None, callback=None, error_callback=None) -> _AsyncResult:
         """
         A variant of the map() method which returns a AsyncResult object.
+
+        If callback is specified then it should be a callable which accepts a single argument.
+        When the result becomes ready callback is applied to it, that is unless the call failed,
+        in which case the error_callback is applied instead.
+
+        If error_callback is specified then it should be a callable which accepts a single argument.
+        If the target function fails, then the error_callback is called with the exception instance.
+
+        Callbacks should complete immediately since otherwise the thread which handles the results will get blocked.
         """
         return self._asynchronize(self, self.map, (func, iterable, chunksize), callback, error_callback)
 

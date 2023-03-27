@@ -57,18 +57,33 @@ class _AsyncResult:
                              "Beware the use of Pool as Context.")
 
     def ready(self):
+        """
+        Return whether the call has completed.
+        """
         self._check_terminated()
         return self._async.ready()
 
     def successful(self):
+        """
+        Return whether the call completed without raising an exception. Will raise ValueError if the result is not ready.
+        """
         if not self.ready():
             raise ValueError("Call to 'successful' before AsyncResult is ready as per 'ready'.")
         return self._async.successful()
 
     def wait(self, timeout=None):
+        """
+        Wait until the result is available or until timeout seconds pass. Raises multiprocessing.TimeoutError
+        if the timeout is exceeded.
+        """
         self._check_terminated()
         self._async.wait(timeout)
 
     def get(self, timeout=None) -> any:
+        """
+        Return the result when it arrives.
+        If timeout is not None and the result does not arrive within timeout seconds then multiprocessing.TimeoutError is raised.
+        If the remote call raised an exception then that exception will be reraised by get().
+        """
         self._check_terminated()
         return self._async.get(timeout)
