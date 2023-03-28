@@ -43,7 +43,8 @@ class Pool:
 
         self.orchestrator._acquire()
 
-        self._worker = make_worker(self.orchestrator.listen_on, start=False)
+        lo = self.orchestrator.listen_on
+        self._worker = make_worker((f"127.0.0.1{lo[0][lo[0].rfind(':'):]}", f"127.0.0.1{lo[1][lo[1].rfind(':'):]}"), start=False)
         threading.Thread(target=self._worker.start).start()
 
     def _map(self, func, iterable, chunksize, mapping_type: Literal['map', 'starmap'] = 'map'):
