@@ -1,6 +1,5 @@
 import os
 
-import dill
 import zmq
 from typing import Tuple
 from multiprocessing import Pool as LocalPool
@@ -49,14 +48,11 @@ class _Worker:
             raise e
 
     def _send(self, payload: ResultPacket) -> bool:
-        _, ok = self._execute_on_socket(self.sender.send, dill.dumps(payload))
+        _, ok = self._execute_on_socket(self.sender.send_pyobj, payload)
         return ok
 
     def _receive(self) -> Tuple[DataPacket | None, bool]:
-        obj, ok = self._execute_on_socket(self.receiver.recv)
-        if ok:
-            obj = dill.loads(obj)
-        return obj, ok
+        return self._execute_on_socket(self.receiver.recv_pyobj)
 
     @staticmethod
     def _prepare_arguments(work: DataPacket):

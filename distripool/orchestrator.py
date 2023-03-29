@@ -1,4 +1,3 @@
-import dill
 import zmq
 from typing import Tuple, Callable, List, Any
 
@@ -28,10 +27,10 @@ class _Orchestrator:
         self.free = True
 
     def _send_work(self, work: DataPacket):
-        self.sender.send(dill.dumps(work))
+        self.sender.send_pyobj(work)
 
     def _receive_result(self) -> ResultPacket:
-        return dill.loads(self.receiver.recv())
+        return self.receiver.recv_pyobj()
 
     def close(self):
         """
