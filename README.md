@@ -7,6 +7,10 @@ Distripool may be used as drop-in replacement of the multiprocessing.Pool.
 
 See `example` for a ready-to-use setup across multiple nodes.  
 
+```diff
+- This library is a potential security hazard! See limitations for details.
+```
+
 ## Features
 
 - Distributed computing with multiple clusters of worker nodes
@@ -129,6 +133,16 @@ orchestrator.close()
 ```
 
 ## Limitations
+
+### Security Limitations:
+
+This library uses `pickle` and distributes the function to be executed on the worker nodes as pickled objects. 
+Therefore, an attacker can send their own function to the worker nodes and, thereby, **execute arbitrary code** on your workers!
+
+Please proceed with caution when using this library.  
+If you do _not_ understand the implications and have no means to protect your worker nodes, do not use this library.
+
+### Feature Limitations:
 
 - Function Closures, i.e. including variables of the outer scope(s) in your function to be distributed, is not supported
 - As for `multiprocessing.Pool`, the function to be distributed must be a top-level function. 
