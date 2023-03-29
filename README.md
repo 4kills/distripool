@@ -5,6 +5,8 @@ The library offers an easy-to-use API implementing the interface of the multipro
 with additional support for distributed computing using multiple clusters of worker nodes. 
 Distripool may be used as drop-in replacement of the multiprocessing.Pool. 
 
+See `example` for a ready-to-use setup across multiple nodes.  
+
 ## Features
 
 - Distributed computing with multiple clusters of worker nodes
@@ -24,7 +26,7 @@ Before the first usage of `Pool` you will have to call `make_orchestrator()` onc
 use `Pool` in and execute a simple Python script calling `make_worker()` on each worker node you want to use. 
 Be aware that `make_orchestartor()` has to be called before `make_worker()`.
 
-See `example` for a ready-to-use setup across devices.  
+See `example` for a ready-to-use setup across multiple nodes.  
 
 ### Basic Usage: 
 
@@ -36,8 +38,9 @@ from distripool import make_worker
 
 ip = '127.0.0.1' # IP of orchestrator
 
-# blocks and executes work indefinitely.
-make_worker((f"{ip}:1337", f"{ip}:1338")) 
+if __name__ == '__main__':
+    # blocks and executes work indefinitely.
+    make_worker((f"{ip}:1337", f"{ip}:1338")) 
 ```
 
 On the orchestrator, where you want to use the Pool:
@@ -45,23 +48,39 @@ On the orchestrator, where you want to use the Pool:
 ```python
 from distripool import Pool, make_orchestrator
 
-# somewhere before the first usage of Pool:
-make_orchestrator()
-
-# some other code ... 
 
 def square(x):
     return x * x
 
-data = [i for i in range(20)]
 
-with Pool() as pool:
-    results = pool.map(square, data)
+if __name__ == '__main__':
+    # somewhere before the first usage of Pool:
+    make_orchestrator()
 
-print(results)
+    # some other code ... 
+
+    data = [i for i in range(20)]
+    
+    with Pool() as pool:
+        results = pool.map(square, data)
+    
+    print(results)
 ```
 
 ### Advanced usage:
+
+If you want to use imports in your function to be distributed, import them in the function itself 
+and make sure the libraries are available on the worker nodes:
+
+```python
+def calculate_twos_logarithm(x):
+    import math
+    
+    return math.log(x, 2)
+
+with Pool() as pool:
+    results = pool.map(calculate_twos_logarithm, [1, 2, 3])
+```
 
 You can also use the asynchronous version of map:
 
@@ -101,13 +120,20 @@ from distripool import Pool, make_orchestrator
 
 orchestrator = make_orchestrator(("127.0.0.1:1337", "127.0.0.1:1338"))
 
-with Pool(processes=4, orchestrator=orchestrator) as pool:
+with Pool(orchestrator=orchestrator) as pool:
     # perform tasks with your custom orchestrator
     pass
 
 # close it once you're done with it in order to free the ports defined above.
 orchestrator.close()
 ```
+
+## Limitations
+
+- Function Closures, i.e. including variables of the outer scope(s) in your function to be distributed, is not supported
+- As for `multiprocessing.Pool`, the function to be distributed must be a top-level function. 
+- Any imports needed in the function to be distributed must be used directly in the function and available on the worker nodes.
+- `distripool.Pool` has, in general, the same limitations as `multiprocessing.Pool` in regard to the function to be distributed. 
 
 ## Documentation
 For more detailed documentation on the available functions and classes, please refer to the source code docstrings.
