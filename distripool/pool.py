@@ -1,3 +1,4 @@
+import inspect
 import os
 import threading
 from typing import Tuple, Callable, List, Any, Iterable, Literal
@@ -54,7 +55,7 @@ class Pool:
         chunk_size = max(1, len(iterable) // self._processes) if chunksize is None else chunksize
         chunks = [iterable[i:i + chunk_size] for i in range(0, len(iterable), chunk_size)]
         for chunk_id, chunk in enumerate(chunks):
-            self.orchestrator._send_work(DataPacket(chunk_id, func, chunk, mapping_type,
+            self.orchestrator._send_work(DataPacket(chunk_id, inspect.getsource(func), func.__name__, chunk, mapping_type,
                                                     self._initializer, self._initargs, self._maxtasksperchild))
 
         unordered_results: List[Tuple[int, List[any, ...]]] = []

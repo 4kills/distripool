@@ -1,10 +1,17 @@
 import os
 
+import dill
 import zmq
 from typing import Tuple
 from multiprocessing import Pool as LocalPool
 
 from distripool.packet import DataPacket, ResultPacket
+
+
+def _execute(f: str, f_name: str, *args, **kwargs):
+    exec(f)
+    func = locals()[f_name]
+    return func(*args, **kwargs)
 
 
 class _Worker:
@@ -30,7 +37,8 @@ class _Worker:
                 or data.initargs != self._initargs
                 or data.maxtasksperchild != self._maxtasksperchild)
 
-    def _execute_on_socket(self, func, *args):
+    @staticmethod
+    def _execute_on_socket(func, *args):
         try:
             return func(*args), True
         except zmq.error.ContextTerminated:  # after using close() from another thread
@@ -41,18 +49,28 @@ class _Worker:
             raise e
 
     def _send(self, payload: ResultPacket) -> bool:
-        _, ok = self._execute_on_socket(self.sender.send_pyobj, payload)
+        _, ok = self._execute_on_socket(self.sender.send, dill.dumps(payload))
         return ok
 
     def _receive(self) -> Tuple[DataPacket | None, bool]:
-        return self._execute_on_socket(self.receiver.recv_pyobj)
+        obj, ok = self._execute_on_socket(self.receiver.recv)
+        if ok:
+            obj = dill.loads(obj)
+        return obj, ok
+
+    @staticmethod
+    def _prepare_arguments(work: DataPacket):
+        if work.mapping_type == 'map':
+            return [(work.func, work.func_name) + (t,) for t in work.chunk]
+        if work.mapping_type == 'starmap':
+            return [(work.func, work.func_name) + t for t in work.chunk]
 
     def _work_loop_with_initial(self, work: DataPacket) -> bool:
         with LocalPool(processes=self._processes, initializer=self._initializer, initargs=self._initargs,
                        maxtasksperchild=self._maxtasksperchild) as local_pool:
             while True:
                 try:
-                    result = work.choose_mapping(local_pool)(work.func, work.chunk)
+                    result = local_pool.starmap(_execute, self._prepare_arguments(work))
                 except Exception as e:
                     result = e
 

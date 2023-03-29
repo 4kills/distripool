@@ -18,6 +18,7 @@ def raise_error(x):
 
 
 def wait(x):
+    import time
     time.sleep(x)
     return x
 
@@ -69,7 +70,7 @@ class TestDistributedPool(unittest.TestCase):
             result_async.get()
 
     def test_map_async_timeout(self):
-        result_async = self.base_pool.map_async(time.sleep, self.random_time)
+        result_async = self.base_pool.map_async(wait, self.random_time)
         with self.assertRaises(multiprocessing.TimeoutError):
             result_async.get(timeout=1)
 
