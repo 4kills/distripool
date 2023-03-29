@@ -1,4 +1,5 @@
 import os
+import sys
 
 import zmq
 from typing import Tuple
@@ -68,6 +69,7 @@ class _Worker:
                 try:
                     result = local_pool.starmap(_execute, self._prepare_arguments(work))
                 except Exception as e:
+                    print(e, flush=True, file=sys.stderr)
                     result = e
 
                 ok = self._send(ResultPacket(work.id, result))
