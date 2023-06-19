@@ -8,7 +8,7 @@ Distripool may be used as drop-in replacement of the multiprocessing.Pool.
 See `example` for a ready-to-use setup across multiple nodes.  
 
 ```diff
-- This library is a potential security hazard! See limitations for details.
+-> This library is a potential security hazard! See limitations for details.
 ```
 
 ## Features
